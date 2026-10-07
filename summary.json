@@ -1,0 +1,36 @@
+{
+  "total_claims": 1200,
+  "best_model": "Logistic Regression",
+  "best_model_accuracy": 1.0,
+  "best_model_macro_f1": 1.0,
+  "model_comparison": {
+    "Logistic Regression": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0
+    },
+    "Random Forest": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0
+    },
+    "Linear SVM": {
+      "accuracy": 1.0,
+      "macro_f1": 1.0
+    }
+  },
+  "priority_breakdown": {
+    "High": 534,
+    "Medium": 258,
+    "Low": 256,
+    "Critical": 152
+  },
+  "component_breakdown": {
+    "FUEL SYSTEM": 163,
+    "BRAKES": 153,
+    "TRANSMISSION": 152,
+    "STEERING": 150,
+    "ENGINE": 147,
+    "ELECTRICAL SYSTEM": 147,
+    "SUSPENSION": 145,
+    "AIRBAGS": 143
+  }
+}

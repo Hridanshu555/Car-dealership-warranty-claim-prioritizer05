@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI warranty claim prioritizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #050b14;
+    --panel: #0c1826;
+    --panel-2: #122232;
+    --border: #1c3448;
+    --text: #eaf6fb;
+    --muted: #7fa3bd;
+    --cyan: #22d3ee;
+    --turquoise: #2dd4bf;
+    --blue: #38bdf8;
+    --deep-blue: #3b82f6;
+    --critical: #ff5f6d;
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100%;
+    position: relative;
+    overflow-x: hidden;
+  }
+  .bg-rays {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 15% 0%, rgba(34,211,238,0.10), transparent 45%),
+      radial-gradient(circle at 85% 15%, rgba(45,212,191,0.08), transparent 40%),
+      radial-gradient(circle at 50% 100%, rgba(56,189,248,0.06), transparent 50%),
+      repeating-linear-gradient(115deg, rgba(34,211,238,0.035) 0px, rgba(34,211,238,0.035) 1px, transparent 1px, transparent 90px);
+    animation: driftRays 22s ease-in-out infinite alternate;
+  }
+  @keyframes driftRays {
+    0%   { transform: translate3d(0,0,0) scale(1); }
+    100% { transform: translate3d(-2%, 1.5%, 0) scale(1.04); }
+  }
+  .content { position: relative; z-index: 1; }
+  header {
+    padding: 28px 20px 18px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(120deg, #0c1826, #0a2233 55%, #0c1826);
+  }
+  header h1 {
+    margin: 6px 0 4px;
+    font-size: clamp(24px, 5vw, 36px);
+    letter-spacing: -0.5px;
+    background: linear-gradient(90deg, #eaf6fb, var(--cyan) 70%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header p { margin: 0; color: var(--muted); font-size: 14px; max-width: 700px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+    margin-bottom: 26px;
+  }
+  .kpi {
+    position: relative;
+    background: linear-gradient(160deg, rgba(12,24,38,0.75), rgba(18,34,50,0.75));
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(14px);
+    animation: riseIn 0.6s ease forwards;
+    transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .kpi::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: 14px;
+    background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%), rgba(34,211,238,0.16), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+  }
+  .kpi:hover::before { opacity: 1; }
+  .kpi:hover {
+    border-color: var(--cyan);
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px -12px rgba(34,211,238,0.35);
+  }
+  @keyframes riseIn { to { opacity: 1; transform: translateY(0); } }
+  .kpi .num { font-size: 28px; font-weight: 800; color: var(--text); position: relative; }
+  .kpi .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+  .kpi.critical .num { color: var(--critical); }
+  .kpi.high .num { color: var(--cyan); }
+  .kpi.good .num { color: var(--turquoise); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    position: relative;
+    background: linear-gradient(160deg, rgba(12,24,38,0.7), rgba(10,21,32,0.7));
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(18px);
+    animation: riseIn 0.7s ease forwards;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .panel::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: 14px;
+    background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%), rgba(45,212,191,0.10), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+  }
+  .panel:hover::before { opacity: 1; }
+  .panel:hover { border-color: #2dd4bf55; box-shadow: 0 14px 36px -18px rgba(45,212,191,0.3); }
+  .panel > * { position: relative; }
+  .panel h2 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--cyan);
+    margin: 0 0 14px;
+    opacity: 0.85;
+  }
+  canvas { max-width: 100%; overflow-x: auto; }
+  .grid .panel:nth-of-type(1) { animation-delay: 0.05s; }
+  .grid .panel:nth-of-type(2) { animation-delay: 0.15s; }
+  .kpis .kpi:nth-child(1) { animation-delay: 0s; }
+  .kpis .kpi:nth-child(2) { animation-delay: 0.08s; }
+  .kpis .kpi:nth-child(3) { animation-delay: 0.16s; }
+  .kpis .kpi:nth-child(4) { animation-delay: 0.24s; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+  tr:hover { background: var(--panel-2); }
+  .badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; display: inline-block; }
+  .badge.Critical { background: rgba(255,95,109,0.18); color: #ff8a92; }
+  .badge.High { background: rgba(56,189,248,0.18); color: #7dd3fc; }
+  .badge.Medium { background: rgba(45,212,191,0.15); color: #5eead4; }
+  .badge.Low { background: rgba(52,211,153,0.15); color: #6ee7b7; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 20px; }
+
+  .live-dot {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--turquoise);
+    margin-bottom: 10px;
+  }
+  .live-dot span.pip {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--turquoise);
+    box-shadow: 0 0 0 0 rgba(45,212,191,0.6);
+    animation: pulse 1.6s ease-out infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(45,212,191,0.55); }
+    70%  { box-shadow: 0 0 0 8px rgba(45,212,191,0); }
+    100% { box-shadow: 0 0 0 0 rgba(45,212,191,0); }
+  }
+
+  .ticker {
+    border-bottom: 1px solid var(--border);
+    background: #081420;
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+  }
+  .ticker::before, .ticker::after {
+    content: "";
+    position: absolute; top: 0; bottom: 0; width: 60px; z-index: 2;
+  }
+  .ticker::before { left: 0; background: linear-gradient(90deg, #081420, transparent); }
+  .ticker::after { right: 0; background: linear-gradient(-90deg, #081420, transparent); }
+  .ticker-track {
+    display: inline-flex;
+    gap: 36px;
+    padding: 10px 0;
+    animation: scrollTicker 28s linear infinite;
+  }
+  .ticker:hover .ticker-track { animation-play-state: paused; }
+  .ticker-item { font-size: 12px; color: var(--muted); display: inline-flex; gap: 8px; align-items: center; }
+  .ticker-item b { color: var(--text); font-weight: 600; }
+  @keyframes scrollTicker {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-rays"></div>
+<div class="content">
+
+<header>
+  <div class="live-dot"><span class="pip"></span>Live triage feed</div>
+  <h1>Car dealership warranty claim prioritizer</h1>
+  <p>NLP-powered dealership warranty claim classifier & priority engine</p>
+</header>
+
+<div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
+
+<div class="wrap">
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Claims by Priority Level</h2>
+      <canvas id="priorityChart" height="220"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Model Accuracy Comparison</h2>
+      <canvas id="modelChart" height="220"></canvas>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Claims by Affected Component</h2>
+      <canvas id="componentChart" height="240"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Critical/High Claims by Make</h2>
+      <canvas id="makeChart" height="240"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Latest Critical Claims — Top of the Triage Queue</h2>
+    <table id="claimsTable">
+      <thead>
+        <tr><th>Claim ID</th><th>Vehicle</th><th>Component</th><th>Priority</th><th>Narrative</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<footer>AutoTriage AI · Sample dataset built on NHTSA ODI complaint schema · Swap in data/live_nhtsa_claims.csv for real-time live data</footer>
+
+</div><!-- /.content -->
+
+<script>
+const DATA = {"summary": {"total_claims": 1200, "best_model": "Logistic Regression", "best_model_accuracy": 1.0, "best_model_macro_f1": 1.0, "model_comparison": {"Logistic Regression": {"accuracy": 1.0, "macro_f1": 1.0}, "Random Forest": {"accuracy": 1.0, "macro_f1": 1.0}, "Linear SVM": {"accuracy": 1.0, "macro_f1": 1.0}}, "priority_breakdown": {"High": 534, "Medium": 258, "Low": 256, "Critical": 152}, "component_breakdown": {"FUEL SYSTEM": 163, "BRAKES": 153, "TRANSMISSION": 152, "STEERING": 150, "ENGINE": 147, "ELECTRICAL SYSTEM": 147, "SUSPENSION": 145, "AIRBAGS": 143}}, "make_priority": {"BMW": {"Critical": 10, "High": 36, "Low": 18, "Medium": 19}, "Chevrolet": {"Critical": 23, "High": 64, "Low": 41, "Medium": 33}, "Ford": {"Critical": 29, "High": 67, "Low": 36, "Medium": 33}, "Honda": {"Critical": 19, "High": 74, "Low": 17, "Medium": 34}, "Hyundai": {"Critical": 6, "High": 34, "Low": 10, "Medium": 21}, "Jeep": {"Critical": 10, "High": 43, "Low": 23, "Medium": 13}, "Kia": {"Critical": 9, "High": 36, "Low": 16, "Medium": 14}, "Nissan": {"Critical": 10, "High": 34, "Low": 26, "Medium": 20}, "Tesla": {"Critical": 8, "High": 42, "Low": 15, "Medium": 11}, "Toyota": {"Critical": 21, "High": 80, "Low": 43, "Medium": 41}, "Volkswagen": {"Critical": 7, "High": 24, "Low": 11, "Medium": 19}}, "comp_priority": {"AIRBAGS": {"Critical": 18, "High": 125, "Low": 0, "Medium": 0}, "BRAKES": {"Critical": 14, "High": 139, "Low": 0, "Medium": 0}, "ELECTRICAL SYSTEM": {"Critical": 23, "High": 0, "Low": 124, "Medium": 0}, "ENGINE": {"Critical": 23, "High": 0, "Low": 0, "Medium": 124}, "FUEL SYSTEM": {"Critical": 23, "High": 140, "Low": 0, "Medium": 0}, "STEERING": {"Critical": 20, "High": 130, "Low": 0, "Medium": 0}, "SUSPENSION": {"Critical": 13, "High": 0, "Low": 132, "Medium": 0}, "TRANSMISSION": {"Critical": 18, "High": 0, "Low": 0, "Medium": 134}}, "sample_rows": [{"claim_id": "WC00848", "make": "Toyota", "model": "Corolla", "model_year": 2020, "component": "STEERING", "priority": "Critical", "complaint_text": "Vehicle pulls hard to the right and there is a clunking noise from the steering column."}, {"claim_id": "WC00622", "make": "Ford", "model": "F-150", "model_year": 2023, "component": "ELECTRICAL SYSTEM", "priority": "Critical", "complaint_text": "Entire dashboard went dark while driving, warning chimes sounded randomly."}, {"claim_id": "WC00153", "make": "Chevrolet", "model": "Silverado", "model_year": 2024, "component": "STEERING", "priority": "Critical", "complaint_text": "Steering locked up briefly while making a turn out of a parking lot."}, {"claim_id": "WC00990", "make": "Ford", "model": "Explorer", "model_year": 2019, "component": "ELECTRICAL SYSTEM", "priority": "Critical", "complaint_text": "Infotainment screen randomly reboots and the backup camera loses signal."}, {"claim_id": "WC00988", "make": "Toyota", "model": "Corolla", "model_year": 2023, "component": "STEERING", "priority": "Critical", "complaint_text": "Steering locked up briefly while making a turn out of a parking lot."}, {"claim_id": "WC00987", "make": "Toyota", "model": "Corolla", "model_year": 2019, "component": "SUSPENSION", "priority": "Critical", "complaint_text": "Vehicle bounces excessively after hitting a pothole, shocks may have failed."}, {"claim_id": "WC00985", "make": "Volkswagen", "model": "Jetta", "model_year": 2024, "component": "BRAKES", "priority": "Critical", "complaint_text": "ABS warning light stays on and brakes feel spongy under normal braking."}, {"claim_id": "WC00984", "make": "Ford", "model": "Explorer", "model_year": 2019, "component": "AIRBAGS", "priority": "Critical", "complaint_text": "Airbag warning light is illuminated constantly, dealer says sensor is faulty."}, {"claim_id": "WC00980", "make": "Honda", "model": "Civic", "model_year": 2022, "component": "TRANSMISSION", "priority": "Critical", "complaint_text": "Vehicle jerks hard when shifting from park to drive, sometimes delays engagement."}, {"claim_id": "WC00381", "make": "Honda", "model": "Civic", "model_year": 2023, "component": "FUEL SYSTEM", "priority": "Critical", "complaint_text": "Strong smell of fuel noticed inside the cabin after refueling."}, {"claim_id": "WC00165", "make": "Toyota", "model": "Corolla", "model_year": 2023, "component": "FUEL SYSTEM", "priority": "Critical", "complaint_text": "Fuel leak observed dripping from underneath the vehicle near the tank."}, {"claim_id": "WC00166", "make": "Honda", "model": "Accord", "model_year": 2024, "component": "AIRBAGS", "priority": "Critical", "complaint_text": "Airbag warning light is illuminated constantly, dealer says sensor is faulty."}]};
+
+const priorityColors = { Critical: '#ff5f6d', High: '#38bdf8', Medium: '#2dd4bf', Low: '#34d399' };
+const order = ['Critical', 'High', 'Medium', 'Low'];
+
+// KPIs
+const kpiEl = document.getElementById('kpis');
+const total = DATA.summary.total_claims;
+const crit = DATA.summary.priority_breakdown.Critical || 0;
+const acc = (DATA.summary.best_model_accuracy * 100).toFixed(1);
+const compCount = Object.keys(DATA.summary.component_breakdown).length;
+kpiEl.innerHTML = `
+  <div class="kpi"><div class="num" data-target="${total}">0</div><div class="label">Total Claims Processed</div></div>
+  <div class="kpi critical"><div class="num" data-target="${crit}">0</div><div class="label">Critical Priority</div></div>
+  <div class="kpi good"><div class="num" data-target="${acc}" data-suffix="%">0%</div><div class="label">${DATA.summary.best_model} Accuracy</div></div>
+  <div class="kpi"><div class="num" data-target="${compCount}">0</div><div class="label">Component Categories</div></div>
+`;
+
+// Count-up animation for KPI numbers
+document.querySelectorAll('.kpi .num').forEach(el => {
+  const target = parseFloat(el.dataset.target);
+  const suffix = el.dataset.suffix || '';
+  const isFloat = !Number.isInteger(target);
+  const duration = 900;
+  const start = performance.now();
+  function tick(now) {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const val = target * eased;
+    el.textContent = (isFloat ? val.toFixed(1) : Math.round(val).toLocaleString()) + suffix;
+    if (p < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+});
+
+// Spotlight cursor-follow glow on panels + kpis
+document.querySelectorAll('.panel, .kpi').forEach(card => {
+  card.addEventListener('mousemove', e => {
+    const rect = card.getBoundingClientRect();
+    card.style.setProperty('--mx', `${e.clientX - rect.left}px`);
+    card.style.setProperty('--my', `${e.clientY - rect.top}px`);
+  });
+});
+
+// Scrolling ticker of critical/high claims
+const tickerTrack = document.getElementById('tickerTrack');
+const tickerItems = DATA.sample_rows.map(r =>
+  `<div class="ticker-item"><b>${r.priority}</b> · ${r.model_year} ${r.make} ${r.model} — ${r.component}</div>`
+).join('');
+tickerTrack.innerHTML = tickerItems + tickerItems; // duplicate for seamless loop
+
+Chart.defaults.color = '#7fa3bd';
+Chart.defaults.borderColor = '#1c3448';
+
+// Priority chart
+new Chart(document.getElementById('priorityChart'), {
+  type: 'bar',
+  data: {
+    labels: order,
+    datasets: [{
+      data: order.map(k => DATA.summary.priority_breakdown[k] || 0),
+      backgroundColor: order.map(k => priorityColors[k]),
+      borderRadius: 6,
+    }]
+  },
+  options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+});
+
+// Model comparison chart
+const modelNames = Object.keys(DATA.summary.model_comparison);
+new Chart(document.getElementById('modelChart'), {
+  type: 'bar',
+  data: {
+    labels: modelNames,
+    datasets: [
+      { label: 'Accuracy', data: modelNames.map(m => DATA.summary.model_comparison[m].accuracy), backgroundColor: '#22d3ee', borderRadius: 6 },
+      { label: 'Macro F1', data: modelNames.map(m => DATA.summary.model_comparison[m].macro_f1), backgroundColor: '#2dd4bf', borderRadius: 6 },
+    ]
+  },
+  options: { scales: { y: { beginAtZero: true, max: 1 } } }
+});
+
+// Component distribution
+const compNames = Object.keys(DATA.summary.component_breakdown);
+new Chart(document.getElementById('componentChart'), {
+  type: 'bar',
+  data: {
+    labels: compNames,
+    datasets: [{ data: compNames.map(c => DATA.summary.component_breakdown[c]), backgroundColor: '#38bdf8', borderRadius: 6 }]
+  },
+  options: { indexAxis: 'y', plugins: { legend: { display: false } } }
+});
+
+// Make chart (stacked)
+const makes = Object.keys(DATA.make_priority);
+new Chart(document.getElementById('makeChart'), {
+  type: 'bar',
+  data: {
+    labels: makes,
+    datasets: order.map(p => ({
+      label: p,
+      data: makes.map(m => DATA.make_priority[m][p] || 0),
+      backgroundColor: priorityColors[p],
+    }))
+  },
+  options: { scales: { x: { stacked: true }, y: { stacked: true } } }
+});
+
+// Table
+const tbody = document.querySelector('#claimsTable tbody');
+DATA.sample_rows.forEach(r => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>${r.claim_id}</td>
+    <td>${r.model_year} ${r.make} ${r.model}</td>
+    <td>${r.component}</td>
+    <td><span class="badge ${r.priority}">${r.priority}</span></td>
+    <td>${r.complaint_text}</td>
+  `;
+  tbody.appendChild(tr);
+});
+</script>
+</body>
+</html>
